@@ -1,4 +1,4 @@
-import { images } from "@/app/constants/images";
+import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import { router } from "expo-router";
 import { Image, Text, View } from "react-native";

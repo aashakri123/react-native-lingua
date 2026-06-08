@@ -1,44 +1,53 @@
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     StyleSheet,
     Text,
     TextInput,
-    View,
+    View
 } from "react-native";
 
 interface VerificationModalProps {
   visible: boolean;
   email: string;
   onClose: () => void;
+  onVerify: (code: string) => void;
 }
 
 export default function VerificationModal({
   visible,
   email,
   onClose,
+  onVerify,
 }: VerificationModalProps) {
   const [code, setCode] = useState("");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  const router = useRouter();
 
   useEffect(() => {
     if (visible && inputRef.current) {
       inputRef.current.focus();
     }
+
+    if (!visible) {
+      setCode("");
+      setHasSubmitted(false);
+    }
   }, [visible]);
 
   useEffect(() => {
-    if (code.length === 6) {
-      // Auto-navigate when all 6 digits are entered
-      setTimeout(() => {
-        router.replace("/");
-      }, 300);
+    if (code.length === 6 && !hasSubmitted) {
+      setHasSubmitted(true);
+      onVerify(code);
     }
-  }, [code, router]);
+
+    if (code.length < 6 && hasSubmitted) {
+      setHasSubmitted(false);
+    }
+  }, [code, hasSubmitted, onVerify]);
 
   const handleCodeChange = (text: string) => {
     const numbers = text.replace(/[^0-9]/g, "").slice(0, 6);
@@ -71,7 +80,10 @@ export default function VerificationModal({
               <Text style={styles.email}>{email}</Text>
             </Text>
 
-            <View style={styles.codeInputContainer}>
+            <Pressable
+              style={styles.codeInputContainer}
+              onPress={() => inputRef.current?.focus()}
+            >
               <TextInput
                 ref={inputRef}
                 style={styles.hiddenInput}
@@ -80,11 +92,15 @@ export default function VerificationModal({
                 keyboardType="number-pad"
                 maxLength={6}
                 textContentType="oneTimeCode"
+                autoFocus={visible}
               />
               <View style={styles.digitBoxes}>{renderCodeDots()}</View>
-            </View>
+            </Pressable>
 
             <Text style={styles.helperText}>Enter 6-digit code</Text>
+            <Pressable style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeText}>Cancel</Text>
+            </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -129,13 +145,18 @@ const styles = StyleSheet.create({
   },
   codeInputContainer: {
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: 24,
+    width: "100%",
+    minHeight: 56,
   },
   hiddenInput: {
     position: "absolute",
     opacity: 0,
-    width: 0,
-    height: 0,
+    width: "100%",
+    height: "100%",
+    top: 0,
+    left: 0,
   },
   digitBoxes: {
     flexDirection: "row",
@@ -161,5 +182,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#9ca3af",
     textAlign: "center",
+    marginBottom: 20,
+  },
+  closeButton: {
+    alignSelf: "center",
+    marginTop: 8,
+  },
+  closeText: {
+    fontSize: 16,
+    color: "#4f46e5",
+    fontWeight: "700",
   },
 });

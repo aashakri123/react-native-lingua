@@ -1,9 +1,15 @@
-import { images } from "@/app/constants/images";
+import { useClerk, useUser } from "@clerk/expo";
+import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Link } from "expo-router";
 import { Image, SafeAreaView, StyleSheet, Text, View } from "react-native";
 
 export default function Index() {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const isAuthenticated = Boolean(user);
+  const name = user?.firstName || user?.fullName || "Learner";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -18,19 +24,38 @@ export default function Index() {
             style={styles.heroImage}
             resizeMode="contain"
           />
-          <Text style={styles.title}>Learn a language in a fun way</Text>
+          <Text style={styles.title}>
+            {isAuthenticated ? `Welcome back, ${name}` : "Learn a language in a fun way"}
+          </Text>
           <Text style={styles.subtitle}>
-            Master new vocabulary and grammar with our interactive lessons.
+            {isAuthenticated
+              ? "Your lessons are ready. Continue your streak and keep learning."
+              : "Master new vocabulary and grammar with our interactive lessons."}
           </Text>
         </View>
 
         <View style={styles.actions}>
-          <Link href="/sign-up" asChild>
-            <PrimaryButton text="Get Started" />
-          </Link>
-          <Link href="/onboarding" style={styles.secondaryLink}>
-            View onboarding preview
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link href="/onboarding" asChild>
+                <PrimaryButton text="Continue learning" />
+              </Link>
+              <PrimaryButton
+                text="Sign out"
+                style={styles.signOutButton}
+                onPress={() => signOut()}
+              />
+            </>
+          ) : (
+            <>
+              <Link href="/sign-up" asChild>
+                <PrimaryButton text="Get Started" />
+              </Link>
+              <Link href="/onboarding" style={styles.secondaryLink}>
+                View onboarding preview
+              </Link>
+            </>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -95,5 +120,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     textAlign: "center",
+  },
+  signOutButton: {
+    marginTop: 16,
+    backgroundColor: "#f3f4f6",
   },
 });

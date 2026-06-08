@@ -1,11 +1,18 @@
-import { images } from "@/app/constants/images";
+import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import VerificationModal from "@/components/VerificationModal";
+import { ensureClerkCaptchaElement } from "@/lib/clerkCaptcha";
+import { useSignUp, useSSO, useAuth } from "@clerk/expo";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
 import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Image,
+    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -15,21 +22,125 @@ import {
     View
 } from "react-native";
 
+const socialStrategies: Record<string, string> = {
+  google: "oauth_google",
+  facebook: "oauth_facebook",
+  apple: "oauth_apple",
+};
+
 export default function SignUp() {
   const router = useRouter();
+  const { signUp } = useSignUp() as any;
+  const { startSSOFlow } = useSSO();
+  const { isSignedIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [verificationVisible, setVerificationVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSignUp = () => {
-    if (email && password) {
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace("/");
+    }
+  }, [isSignedIn]);
+
+  const handleSignUp = async () => {
+    if (!email || !password || !signUp) {
+      setErrorMessage("Please enter your email and password.");
+      return;
+    }
+
+    ensureClerkCaptchaElement();
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const result = await (signUp as any).password({ emailAddress: email, password });
+      if (result.error) {
+        setErrorMessage(result.error.message || "Unable to create your account.");
+        return;
+      }
+
+      const sendResult = await (signUp as any).verifications.sendEmailCode();
+      if (sendResult.error) {
+        setErrorMessage(sendResult.error.message || "Unable to send verification code.");
+        return;
+      }
+
       setVerificationVisible(true);
+    } catch {
+      setErrorMessage("Something went wrong while creating your account.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSocialAuth = (provider: string) => {
-    setVerificationVisible(true);
+  const handleSocialAuth = async (provider: string) => {
+    if (!startSSOFlow) {
+      setErrorMessage("Authentication is not ready yet.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const strategy = socialStrategies[provider] as any;
+      if (!strategy) {
+        setErrorMessage("That social provider is not supported.");
+        return;
+      }
+
+      const redirectUrl = Platform.OS === "web"
+        ? Linking.createURL("/")
+        : Linking.createURL("/", { scheme: "doulingoclone" });
+
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy,
+        redirectUrl,
+      });
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Social sign up failed. Please try another option.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerification = async (code: string) => {
+    if (!signUp) {
+      setErrorMessage("Verification is not available.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const verificationResult = await (signUp as any).verifications.verifyEmailCode({ code });
+      if (verificationResult.error) {
+        setErrorMessage(verificationResult.error.message || "Invalid code. Please try again.");
+        return;
+      }
+
+      const finalizeResult = await (signUp as any).finalize();
+      if (finalizeResult.error) {
+        setErrorMessage(finalizeResult.error.message || "Unable to complete sign-up.");
+        return;
+      }
+
+      router.replace("/");
+    } catch {
+      setErrorMessage("There was a problem verifying your code.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -93,8 +204,10 @@ export default function SignUp() {
               </View>
             </View>
 
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
             <PrimaryButton
-              text="Sign Up"
+              text={isSubmitting ? "Creating account..." : "Sign Up"}
               style={styles.signUpButton}
               onPress={handleSignUp}
             />
@@ -111,7 +224,7 @@ export default function SignUp() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("google")}
             >
-              <Text style={styles.socialIcon}>🔍</Text>
+              <Image source={images.googleLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Google</Text>
             </Pressable>
 
@@ -119,7 +232,7 @@ export default function SignUp() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("facebook")}
             >
-              <Text style={styles.socialIcon}>f</Text>
+              <Image source={images.facebookLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Facebook</Text>
             </Pressable>
 
@@ -127,7 +240,7 @@ export default function SignUp() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("apple")}
             >
-              <Text style={styles.socialIcon}>🍎</Text>
+              <Image source={images.appleLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Apple</Text>
             </Pressable>
           </View>
@@ -145,6 +258,7 @@ export default function SignUp() {
         visible={verificationVisible}
         email={email}
         onClose={() => setVerificationVisible(false)}
+        onVerify={handleVerification}
       />
     </SafeAreaView>
   );
@@ -234,6 +348,11 @@ const styles = StyleSheet.create({
   signUpButton: {
     marginTop: 8,
   },
+  errorText: {
+    color: "#dc2626",
+    fontSize: 14,
+    marginBottom: 12,
+  },
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -264,9 +383,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   socialIcon: {
-    fontSize: 20,
-    marginRight: 12,
     width: 24,
+    height: 24,
+    marginRight: 12,
   },
   socialText: {
     fontSize: 16,
