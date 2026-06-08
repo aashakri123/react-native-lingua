@@ -37,7 +37,7 @@ export default function Index() {
         <View style={styles.actions}>
           {isAuthenticated ? (
             <>
-              <Link href="/onboarding" asChild>
+              <Link href="/choose-language" asChild>
                 <PrimaryButton text="Continue learning" />
               </Link>
               <PrimaryButton
