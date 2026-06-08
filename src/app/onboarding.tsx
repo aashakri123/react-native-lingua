@@ -3,33 +3,28 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { Link } from "expo-router";
 import { Image, SafeAreaView, StyleSheet, Text, View } from "react-native";
 
-export default function Index() {
+export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.brandRow}>
           <Image source={images.mascotLogo} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.brandText}>Lingua</Text>
+          <Text style={styles.brandText}>lingua</Text>
         </View>
 
-        <View style={styles.content}>
-          <Image
-            source={images.onboardingIllustration}
-            style={styles.heroImage}
-            resizeMode="contain"
-          />
-          <Text style={styles.title}>Learn a language in a fun way</Text>
-          <Text style={styles.subtitle}>
-            Master new vocabulary and grammar with our interactive lessons.
+        <View style={styles.heroContent}>
+          <Text style={styles.title}>
+            Your AI language
+            <Text style={styles.titleAccent}> teacher.</Text>
           </Text>
+          <Text style={styles.subtitle}>Real conversations, personalized lessons, anytime, anywhere.</Text>
         </View>
+
+        <Image source={images.onboardingIllustration} style={styles.illustration} resizeMode="contain" />
 
         <View style={styles.actions}>
           <Link href="/sign-up" asChild>
             <PrimaryButton text="Get Started" />
-          </Link>
-          <Link href="/onboarding" style={styles.secondaryLink}>
-            View onboarding preview
           </Link>
         </View>
       </View>
@@ -45,15 +40,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "space-between",
-    alignItems: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 32,
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
+    gap: 10,
   },
   logo: {
     width: 40,
@@ -61,39 +56,38 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontSize: 28,
-    fontWeight: "700",
-    color: "#000000",
+    fontWeight: "800",
+    color: "#111827",
+    marginLeft: 8,
   },
-  content: {
+  heroContent: {
+    marginTop: 24,
     alignItems: "center",
-  },
-  heroImage: {
-    width: 300,
-    height: 300,
+    paddingHorizontal: 4,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#000000",
+    fontSize: 36,
+    fontWeight: "800",
+    color: "#0f172a",
     textAlign: "center",
-    marginTop: 32,
+    lineHeight: 44,
+  },
+  titleAccent: {
+    color: "#5b21b6",
   },
   subtitle: {
     fontSize: 16,
     color: "#6b7280",
     textAlign: "center",
     marginTop: 16,
-    maxWidth: 320,
     lineHeight: 24,
+    maxWidth: 320,
+  },
+  illustration: {
+    width: "100%",
+    height: 420,
   },
   actions: {
-    width: "100%",
-  },
-  secondaryLink: {
     marginTop: 16,
-    color: "#4f46e5",
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
   },
 });

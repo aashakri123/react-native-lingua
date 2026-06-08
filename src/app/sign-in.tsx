@@ -12,18 +12,16 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    View
+    View,
 } from "react-native";
 
-export default function SignUp() {
+export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [verificationVisible, setVerificationVisible] = useState(false);
 
-  const handleSignUp = () => {
-    if (email && password) {
+  const handleSignIn = () => {
+    if (email) {
       setVerificationVisible(true);
     }
   };
@@ -42,9 +40,9 @@ export default function SignUp() {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.title}>Create your account</Text>
+          <Text style={styles.title}>Sign in to your account</Text>
           <Text style={styles.subtitle}>
-            Start your language journey today <Text style={styles.emoji}>✨</Text>
+            Welcome back, let's continue learning <Text style={styles.emoji}>👋</Text>
           </Text>
 
           <View style={styles.mascotContainer}>
@@ -69,34 +67,10 @@ export default function SignUp() {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Enter password"
-                  placeholderTextColor="#9ca3af"
-                  secureTextEntry={!showPassword}
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <Pressable
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={8}
-                >
-                  <AntDesign
-                    name={showPassword ? "eye" : "eye-invisible"}
-                    size={20}
-                    color="#9ca3af"
-                  />
-                </Pressable>
-              </View>
-            </View>
-
             <PrimaryButton
-              text="Sign Up"
-              style={styles.signUpButton}
-              onPress={handleSignUp}
+              text="Sign In"
+              style={styles.signInButton}
+              onPress={handleSignIn}
             />
           </View>
 
@@ -133,9 +107,9 @@ export default function SignUp() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <Pressable onPress={() => router.push("/sign-in")}>
-              <Text style={styles.footerLink}>Log in</Text>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Pressable onPress={() => router.push("/sign-up")}>
+              <Text style={styles.footerLink}>Create one</Text>
             </Pressable>
           </View>
         </View>
@@ -216,22 +190,7 @@ const styles = StyleSheet.create({
     color: "#111827",
     backgroundColor: "#f9fafb",
   },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 16,
-    backgroundColor: "#f9fafb",
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#111827",
-  },
-  signUpButton: {
+  signInButton: {
     marginTop: 8,
   },
   dividerContainer: {
