@@ -1,11 +1,18 @@
-import { images } from "@/app/constants/images";
+import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import VerificationModal from "@/components/VerificationModal";
+import { ensureClerkCaptchaElement } from "@/lib/clerkCaptcha";
+import { useSignIn, useSSO, useAuth } from "@clerk/expo";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
 import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Image,
+    Platform,
     Pressable,
     SafeAreaView,
     ScrollView,
@@ -15,19 +22,120 @@ import {
     View,
 } from "react-native";
 
+const socialStrategies: Record<string, string> = {
+  google: "oauth_google",
+  facebook: "oauth_facebook",
+  apple: "oauth_apple",
+};
+
 export default function SignIn() {
   const router = useRouter();
+  const { signIn } = useSignIn() as any;
+  const { startSSOFlow } = useSSO();
+  const { isSignedIn } = useAuth();
   const [email, setEmail] = useState("");
   const [verificationVisible, setVerificationVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSignIn = () => {
-    if (email) {
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace("/");
+    }
+  }, [isSignedIn]);
+
+  const handleSignIn = async () => {
+    if (!email || !signIn) {
+      setErrorMessage("Please enter your email to continue.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const createResult = await (signIn as any).create({ identifier: email, strategy: "email_code" as any });
+      if (createResult.error) {
+        setErrorMessage(createResult.error.message || "Unable to start sign in.");
+        return;
+      }
+
+      const sendResult = await (signIn as any).emailCode.sendCode();
+      if (sendResult.error) {
+        setErrorMessage(sendResult.error.message || "Unable to send verification code.");
+        return;
+      }
+
       setVerificationVisible(true);
+    } catch {
+      setErrorMessage("Something went wrong while starting sign in.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSocialAuth = (provider: string) => {
-    setVerificationVisible(true);
+  const handleSocialAuth = async (provider: string) => {
+    if (!startSSOFlow) {
+      setErrorMessage("Authentication is not ready yet.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const strategy = socialStrategies[provider] as any;
+      if (!strategy) {
+        setErrorMessage("That social provider is not supported.");
+        return;
+      }
+
+      const redirectUrl = Platform.OS === "web"
+        ? Linking.createURL("/")
+        : Linking.createURL("/", { scheme: "doulingoclone" });
+
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy,
+        redirectUrl,
+      });
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Social sign in failed. Please try another option.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerification = async (code: string) => {
+    if (!signIn) {
+      setErrorMessage("Verification is not available.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const verifyResult = await (signIn as any).emailCode.verifyCode({ code });
+      if (verifyResult.error) {
+        setErrorMessage(verifyResult.error.message || "Invalid code. Please try again.");
+        return;
+      }
+
+      if ((signIn as any).status === "complete") {
+        router.replace("/");
+      } else {
+        setErrorMessage("Verification completed, but sign-in could not be finalized.");
+      }
+    } catch {
+      setErrorMessage("There was a problem verifying your code.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -67,8 +175,9 @@ export default function SignIn() {
               />
             </View>
 
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
             <PrimaryButton
-              text="Sign In"
+              text={isSubmitting ? "Sending code..." : "Sign In"}
               style={styles.signInButton}
               onPress={handleSignIn}
             />
@@ -85,7 +194,7 @@ export default function SignIn() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("google")}
             >
-              <Text style={styles.socialIcon}>🔍</Text>
+              <Image source={images.googleLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Google</Text>
             </Pressable>
 
@@ -93,7 +202,7 @@ export default function SignIn() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("facebook")}
             >
-              <Text style={styles.socialIcon}>f</Text>
+              <Image source={images.facebookLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Facebook</Text>
             </Pressable>
 
@@ -101,14 +210,14 @@ export default function SignIn() {
               style={styles.socialButton}
               onPress={() => handleSocialAuth("apple")}
             >
-              <Text style={styles.socialIcon}>🍎</Text>
+              <Image source={images.appleLogo} style={styles.socialIcon} resizeMode="contain" />
               <Text style={styles.socialText}>Continue with Apple</Text>
             </Pressable>
           </View>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
-            <Pressable onPress={() => router.push("/sign-up")}>
+            <Pressable onPress={() => router.push("/sign-up")}> 
               <Text style={styles.footerLink}>Create one</Text>
             </Pressable>
           </View>
@@ -119,6 +228,7 @@ export default function SignIn() {
         visible={verificationVisible}
         email={email}
         onClose={() => setVerificationVisible(false)}
+        onVerify={handleVerification}
       />
     </SafeAreaView>
   );
@@ -193,6 +303,11 @@ const styles = StyleSheet.create({
   signInButton: {
     marginTop: 8,
   },
+  errorText: {
+    color: "#dc2626",
+    fontSize: 14,
+    marginBottom: 12,
+  },
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -223,9 +338,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   socialIcon: {
-    fontSize: 20,
-    marginRight: 12,
     width: 24,
+    height: 24,
+    marginRight: 12,
   },
   socialText: {
     fontSize: 16,

@@ -1,12 +1,12 @@
-import { images } from "@/app/constants/images";
+import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Link } from "expo-router";
-import { Image, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.brandRow}>
           <Image source={images.mascotLogo} style={styles.logo} resizeMode="contain" />
           <Text style={styles.brandText}>lingua</Text>
@@ -27,7 +27,7 @@ export default function Onboarding() {
             <PrimaryButton text="Get Started" />
           </Link>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingTop: 24,
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   },
   illustration: {
     width: "100%",
-    height: 420,
+    height: 320,
   },
   actions: {
     marginTop: 16,
