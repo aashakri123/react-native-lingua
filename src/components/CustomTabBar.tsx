@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import {
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -166,6 +167,7 @@ export default function CustomTabBar({
             height: circleHeight,
             borderRadius: circleWidth / 2,
             top: (barHeight - circleHeight) / 2,
+            pointerEvents: "none" as any,
           },
           animatedCircleStyle,
         ]}
@@ -212,26 +214,47 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 8,
+    zIndex: 99,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: "0 -3px 8px rgba(0, 0, 0, 0.04)",
+      },
+    }),
   },
   activeCircle: {
     position: "absolute",
     backgroundColor: "#4f46e5",
-    shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#4f46e5",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 6,
+      },
+      web: {
+        boxShadow: "0 4px 12px rgba(79, 70, 229, 0.3)",
+      },
+    }),
   },
   tabItemsContainer: {
     flexDirection: "row",
     width: "100%",
   },
   tabButton: {
+    flex: 1,
+    height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },

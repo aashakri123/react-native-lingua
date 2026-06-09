@@ -11,6 +11,9 @@ import japanFlag from "@/assets/images/japan-flag.png";
 import koreaFlag from "@/assets/images/korea-flag.png";
 import germanyFlag from "@/assets/images/germany-flag.png";
 import chinaFlag from "@/assets/images/china-flag.png";
+import streakFire from "@/assets/images/streak-fire.png";
+import palace from "@/assets/images/palace.png";
+import treasure from "@/assets/images/treasure.png";
 
 export const images = {
   mascotLogo,
@@ -26,4 +29,7 @@ export const images = {
   koreaFlag,
   germanyFlag,
   chinaFlag,
+  streakFire,
+  palace,
+  treasure,
 };
