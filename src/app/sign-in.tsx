@@ -1,12 +1,9 @@
 import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
 import VerificationModal from "@/components/VerificationModal";
-import { ensureClerkCaptchaElement } from "@/lib/clerkCaptcha";
 import { useSignIn, useSSO, useAuth } from "@clerk/expo";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-
-WebBrowser.maybeCompleteAuthSession();
 import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
@@ -22,6 +19,8 @@ import {
     View,
 } from "react-native";
 
+WebBrowser.maybeCompleteAuthSession();
+
 const socialStrategies: Record<string, string> = {
   google: "oauth_google",
   facebook: "oauth_facebook",
@@ -32,17 +31,17 @@ export default function SignIn() {
   const router = useRouter();
   const { signIn } = useSignIn() as any;
   const { startSSOFlow } = useSSO();
-  const { isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const [email, setEmail] = useState("");
   const [verificationVisible, setVerificationVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isSignedIn) {
+    if (isLoaded && isSignedIn) {
       router.replace("/");
     }
-  }, [isSignedIn]);
+  }, [isLoaded, isSignedIn, router]);
 
   const handleSignIn = async () => {
     if (!email || !signIn) {
@@ -150,7 +149,7 @@ export default function SignIn() {
         <View style={styles.content}>
           <Text style={styles.title}>Sign in to your account</Text>
           <Text style={styles.subtitle}>
-            Welcome back, let's continue learning <Text style={styles.emoji}>👋</Text>
+            Welcome back, let&apos;s continue learning <Text style={styles.emoji}>👋</Text>
           </Text>
 
           <View style={styles.mascotContainer}>
@@ -216,7 +215,7 @@ export default function SignIn() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
             <Pressable onPress={() => router.push("/sign-up")}> 
               <Text style={styles.footerLink}>Create one</Text>
             </Pressable>
