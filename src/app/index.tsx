@@ -1,14 +1,29 @@
 import { useClerk, useUser } from "@clerk/expo";
 import { images } from "@/constants/images";
 import PrimaryButton from "@/components/PrimaryButton";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { Image, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import { useLanguageStore } from "@/store/useLanguageStore";
 
 export default function Index() {
-  const { user } = useUser();
+  const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
   const isAuthenticated = Boolean(user);
   const name = user?.firstName || user?.fullName || "Learner";
+  
+  const selectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      if (!selectedLanguageId) {
+        router.replace("/choose-language");
+      } else {
+        router.replace("/(tabs)/home");
+      }
+    }
+  }, [isLoaded, isSignedIn, selectedLanguageId, router]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -27,6 +42,7 @@ export default function Index() {
           <Text style={styles.title}>
             {isAuthenticated ? `Welcome back, ${name}` : "Learn a language in a fun way"}
           </Text>
+
           <Text style={styles.subtitle}>
             {isAuthenticated
               ? "Your lessons are ready. Continue your streak and keep learning."

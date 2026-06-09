@@ -33,6 +33,7 @@ export default function VerificationModal({
     }
 
     if (!visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCode("");
       setHasSubmitted(false);
     }
@@ -40,6 +41,7 @@ export default function VerificationModal({
 
   useEffect(() => {
     if (code.length === 6 && !hasSubmitted) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasSubmitted(true);
       onVerify(code);
     }
@@ -76,7 +78,7 @@ export default function VerificationModal({
           <View style={styles.content}>
             <Text style={styles.title}>Verify your email</Text>
             <Text style={styles.subtitle}>
-              We've sent a verification code to{"\n"}
+              We&apos;ve sent a verification code to{"\n"}
               <Text style={styles.email}>{email}</Text>
             </Text>
 

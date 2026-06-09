@@ -5,6 +5,8 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useUser } from "@clerk/expo";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import {
   Image,
   Pressable,
@@ -18,21 +20,41 @@ import {
 
 export default function ChooseLanguage() {
   const router = useRouter();
+  const { user } = useUser();
+  const isAuthenticated = Boolean(user);
+  
+  const storeSelectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
+  const setSelectedLanguageStore = useLanguageStore((state) => state.setSelectedLanguage);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLanguageId, setSelectedLanguageId] = useState<string | null>("es"); // Spanish selected by default to match design
+  const [selectedLanguageId, setSelectedLanguageId] = useState<string | null>(
+    storeSelectedLanguageId || "es"
+  );
+
+  const showBackButton = !isAuthenticated || !!storeSelectedLanguageId;
 
   const filteredLanguages = languages.filter((lang) =>
     lang.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const navigateBackOrHome = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
+    }
+  };
+
   const handleSelect = (id: string) => {
     setSelectedLanguageId(id);
+    setSelectedLanguageStore(id);
+    navigateBackOrHome();
   };
 
   const handleContinue = () => {
     if (selectedLanguageId) {
-      // Navigate back to the home page after selecting a language
-      router.replace("/");
+      setSelectedLanguageStore(selectedLanguageId);
+      navigateBackOrHome();
     }
   };
 
@@ -41,9 +63,13 @@ export default function ChooseLanguage() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8}>
-            <AntDesign name="left" size={24} color="#111827" />
-          </Pressable>
+          {showBackButton ? (
+            <Pressable onPress={navigateBackOrHome} style={styles.backButton} hitSlop={8}>
+              <AntDesign name="left" size={24} color="#111827" />
+            </Pressable>
+          ) : (
+            <View style={styles.headerPlaceholder} />
+          )}
           <Text style={styles.headerTitle}>Choose a language</Text>
           <View style={styles.headerPlaceholder} />
         </View>
@@ -106,7 +132,7 @@ export default function ChooseLanguage() {
             })}
 
             {filteredLanguages.length === 0 && (
-              <Text style={styles.emptyText}>No languages found matching "{searchQuery}"</Text>
+              <Text style={styles.emptyText}>No languages found matching &quot;{searchQuery}&quot;</Text>
             )}
           </View>
         </ScrollView>

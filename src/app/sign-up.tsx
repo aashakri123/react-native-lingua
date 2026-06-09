@@ -5,8 +5,6 @@ import { ensureClerkCaptchaElement } from "@/lib/clerkCaptcha";
 import { useSignUp, useSSO, useAuth } from "@clerk/expo";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-
-WebBrowser.maybeCompleteAuthSession();
 import { AntDesign } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
@@ -22,6 +20,8 @@ import {
     View
 } from "react-native";
 
+WebBrowser.maybeCompleteAuthSession();
+
 const socialStrategies: Record<string, string> = {
   google: "oauth_google",
   facebook: "oauth_facebook",
@@ -32,7 +32,7 @@ export default function SignUp() {
   const router = useRouter();
   const { signUp } = useSignUp() as any;
   const { startSSOFlow } = useSSO();
-  const { isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,10 +41,10 @@ export default function SignUp() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isSignedIn) {
+    if (isLoaded && isSignedIn) {
       router.replace("/");
     }
-  }, [isSignedIn]);
+  }, [isLoaded, isSignedIn, router]);
 
   const handleSignUp = async () => {
     if (!email || !password || !signUp) {
