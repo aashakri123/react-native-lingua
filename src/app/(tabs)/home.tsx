@@ -15,6 +15,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { images } from "@/constants/images";
 import { useLanguageStore } from "@/store/useLanguageStore";
+import { useProgressStore } from "@/store/useProgressStore";
 import { languages } from "@/data/languages";
 import { units } from "@/data/units";
 import { lessons } from "@/data/lessons";
@@ -42,6 +43,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useUser();
   const { selectedLanguageId, setSelectedLanguage } = useLanguageStore();
+  const { xp, streak, completedLessons } = useProgressStore();
 
   const name = user?.firstName || user?.fullName || "Learner";
 
@@ -49,7 +51,9 @@ export default function HomeScreen() {
   const currentLanguage = languages.find((lang) => lang.id === selectedLanguageId) || languages[0];
   const currentUnit = units.find((unit) => unit.languageId === selectedLanguageId) || units[0];
   const unitLessons = lessons.filter((lesson) => lesson.unitId === currentUnit?.id);
-  const currentLesson = unitLessons[0] || lessons[0];
+  
+  // Match the active lesson dynamically (the first uncompleted lesson, or the first lesson if all are complete)
+  const currentLesson = unitLessons.find((lesson) => !completedLessons.includes(lesson.id)) || unitLessons[0] || lessons[0];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -66,7 +70,7 @@ export default function HomeScreen() {
           <View style={styles.headerRight}>
             <View style={styles.streakContainer}>
               <Image source={images.streakFire} style={styles.streakIcon} resizeMode="contain" />
-              <Text style={styles.streakText}>12</Text>
+              <Text style={styles.streakText}>{streak}</Text>
             </View>
             <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
               <Ionicons name="notifications-outline" size={24} color="#334155" />
@@ -79,12 +83,12 @@ export default function HomeScreen() {
           <View style={styles.dailyGoalLeft}>
             <Text style={styles.cardSectionTitle}>Daily goal</Text>
             <Text style={styles.xpText}>
-              <Text style={styles.xpBold}>15</Text>
+              <Text style={styles.xpBold}>{xp}</Text>
               <Text style={styles.xpTotal}> / 20 XP</Text>
             </Text>
             {/* Custom Progress Bar */}
             <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBarFill, { width: `${(15 / 20) * 100}%` }]} />
+              <View style={[styles.progressBarFill, { width: `${Math.min((xp / 20) * 100, 100)}%` }]} />
             </View>
           </View>
           
