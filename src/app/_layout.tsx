@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ClerkProvider, useUser } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { Stack } from "expo-router";
@@ -50,13 +51,16 @@ function PostHogAuthTracker() {
   return null;
 }
 
+
 export default function RootLayout() {
   return (
-    <PostHogProvider client={posthog}>
-      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-        <PostHogAuthTracker />
-        <Stack screenOptions={{ headerShown: false }} />
-      </ClerkProvider>
-    </PostHogProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <PostHogProvider client={posthog}>
+        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+          <PostHogAuthTracker />
+          <Stack screenOptions={{ headerShown: false }} />
+        </ClerkProvider>
+      </PostHogProvider>
+    </GestureHandlerRootView>
   );
 }

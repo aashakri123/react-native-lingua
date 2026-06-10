@@ -11,14 +11,14 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.jsmastry.duolingoclone",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.doulingoclone"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
@@ -38,7 +38,23 @@
           }
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "@stream-io/video-react-native-sdk",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to capture and transmit video.",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to capture and transmit audio."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

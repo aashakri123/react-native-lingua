@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Platform,
   StyleSheet,
@@ -11,6 +12,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth, useUser } from "@clerk/expo";
+import {
+  StreamVideoClient,
+  StreamVideo,
+  StreamCall,
+  Call,
+  CallingState,
+  useCall,
+  useCallStateHooks,
+} from "@stream-io/video-react-native-sdk";
 
 import { images } from "@/constants/images";
 import { useLanguageStore } from "@/store/useLanguageStore";
@@ -20,6 +31,8 @@ import { units } from "@/data/units";
 import { lessons } from "@/data/lessons";
 
 export default function LessonScreen() {
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
   const router = useRouter();
   const posthog = usePostHog();
   const { lessonId } = useLocalSearchParams<{ lessonId?: string }>();
@@ -31,24 +44,16 @@ export default function LessonScreen() {
   const currentUnit = units.find((unit) => unit.languageId === selectedLanguageId) || units[0];
   const unitLessons = lessons.filter((lesson) => lesson.unitId === currentUnit?.id);
   
-  let currentLesson = lessons.find((lesson) => lesson.id === lessonId);
-  if (!currentLesson) {
-    currentLesson = unitLessons.find((lesson) => !completedLessons.includes(lesson.id)) || unitLessons[0] || lessons[0];
-  }
+  const currentLesson = lessons.find((lesson) => lesson.id === lessonId) ||
+    unitLessons.find((lesson) => !completedLessons.includes(lesson.id)) ||
+    unitLessons[0] ||
+    lessons[0];
 
-  // Retrieve primary phrase/word for conversation display
-  const primaryPhrase = currentLesson.phrases?.[0] || {
-    text: "¡Hola! ¿Cómo estás?",
-    translation: "Hello! How are you?",
-    context: "Greeting",
-  };
-
-  // State controls
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
-  const [showSubtitles, setShowSubtitles] = useState(true);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [sessionStatus, setSessionStatus] = useState("Online"); // "Online" | "Listening..." | "Muted"
+  // Stream Client and Call state management
+  const [client, setClient] = useState<StreamVideoClient | null>(null);
+  const [call, setCall] = useState<Call | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // PostHog Timer References
   const startTimeRef = useRef<number>(0);
@@ -65,30 +70,233 @@ export default function LessonScreen() {
     }
 
     startTimeRef.current = Date.now();
+    const isCompleted = isCompletedRef;
+    const startTime = startTimeRef;
 
     // Clean unmount handles lesson abandonment
     return () => {
-      if (!isCompletedRef.current && posthog) {
-        const durationSeconds = Math.round((Date.now() - startTimeRef.current) / 1000);
+      if (!isCompleted.current && posthog) {
+        const durationSeconds = Math.round((Date.now() - startTime.current) / 1000);
         posthog.capture("lesson_abandoned", {
           lesson_id: currentLesson.id,
           time_into_lesson_seconds: durationSeconds,
-          last_question_index: 0, // Conversation screens don't have indexes
+          last_question_index: 0,
         });
       }
     };
   }, [posthog, currentLesson.id, currentLanguage.name, currentLesson.order]);
 
-  const handleToggleMic = () => {
-    setIsMicMuted((prev) => {
-      const nextState = !prev;
-      setSessionStatus(nextState ? "Muted" : "Online");
-      return nextState;
-    });
+  // Setup Stream Video client and Join Call
+  useEffect(() => {
+    let isActive = true;
+    let activeClient: StreamVideoClient | null = null;
+    let activeCall: Call | null = null;
+
+    async function initStream() {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Fetch user token from Clerk
+        const clerkToken = await getToken();
+        if (!clerkToken) {
+          throw new Error("No authenticated session. Please log in.");
+        }
+
+        // POST request to Expo API Route
+        const response = await fetch("/api/stream-session", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${clerkToken}`,
+          },
+          body: JSON.stringify({
+            lessonId: currentLesson.id,
+            languageId: selectedLanguageId,
+            userName: user?.fullName || user?.username || "Learner",
+            userImage: user?.imageUrl || "",
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to initiate lesson session.");
+        }
+
+        const sessionData = await response.json();
+        if (!isActive) return;
+
+        // Initialize Stream Video Client
+        const tokenProvider = async () => sessionData.token;
+        const c = StreamVideoClient.getOrCreateInstance({
+          apiKey: sessionData.apiKey,
+          user: {
+            id: sessionData.userId,
+            name: sessionData.userName,
+            image: sessionData.userImage,
+          },
+          tokenProvider,
+        });
+
+        activeClient = c;
+        setClient(c);
+
+        // Create/Retrieve the call session
+        const cl = c.call(sessionData.callType, sessionData.callId, { reuseInstance: true });
+        cl.setDisconnectionTimeout(120);
+
+        // Join the audio call session
+        await cl.join({ create: false });
+        // Disable camera for an audio-only lesson call
+        await cl.camera.disable();
+
+        activeCall = cl;
+        setCall(cl);
+        setIsLoading(false);
+      } catch (err: any) {
+        console.error("Stream initialization error:", err);
+        if (isActive) {
+          setError(err.message || "Failed to connect to the classroom session.");
+          setIsLoading(false);
+        }
+      }
+    }
+
+    if (isLoaded && isSignedIn && user?.id) {
+      initStream();
+    } else if (isLoaded && !isSignedIn) {
+      Promise.resolve().then(() => {
+        setError("Please log in to join lesson audio rooms.");
+        setIsLoading(false);
+      });
+    }
+
+    return () => {
+      isActive = false;
+      if (activeCall) {
+        if (activeCall.state.callingState !== CallingState.LEFT) {
+          activeCall.leave().catch((err) => console.error("Error leaving Stream call:", err));
+        }
+      }
+      if (activeClient) {
+        activeClient.disconnectUser().catch((err) => console.error("Error disconnecting Stream user:", err));
+      }
+    };
+  }, [
+    isLoaded,
+    isSignedIn,
+    user?.id,
+    user?.fullName,
+    user?.username,
+    user?.imageUrl,
+    currentLesson.id,
+    selectedLanguageId,
+    getToken,
+  ]);
+
+  if (!currentLesson) {
+    return null;
+  }
+
+  if (!isLoaded || isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+          <Text style={styles.loadingText}>Connecting to audio classroom...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={56} color="#ef4444" />
+          <Text style={styles.errorText}>Connection Error</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.retryButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.retryButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!client || !call) {
+    return null;
+  }
+
+  return (
+    <StreamVideo client={client}>
+      <StreamCall call={call}>
+        <LessonCallContent
+          currentLesson={currentLesson}
+          currentLanguage={currentLanguage}
+          streak={streak}
+          completeLesson={completeLesson}
+          isCompletedRef={isCompletedRef}
+          startTimeRef={startTimeRef}
+          router={router}
+          posthog={posthog}
+          clerkUser={user}
+        />
+      </StreamCall>
+    </StreamVideo>
+  );
+}
+
+// Inner Component that has access to Stream Call context
+function LessonCallContent({
+  currentLesson,
+  currentLanguage,
+  streak,
+  completeLesson,
+  isCompletedRef,
+  startTimeRef,
+  router,
+  posthog,
+  clerkUser,
+}: {
+  currentLesson: any;
+  currentLanguage: any;
+  streak: number;
+  completeLesson: any;
+  isCompletedRef: React.MutableRefObject<boolean>;
+  startTimeRef: React.MutableRefObject<number>;
+  router: any;
+  posthog: any;
+  clerkUser: any;
+}) {
+  const call = useCall();
+  const { useCallCallingState, useMicrophoneState } = useCallStateHooks();
+  const callingState = useCallCallingState();
+  const { status: micStatus, isSpeakingWhileMuted } = useMicrophoneState();
+
+  const isMicMuted = micStatus === "disabled";
+
+  // Subtitles state
+  const [showSubtitles, setShowSubtitles] = useState(true);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
+  // Retrieve primary phrase/word for conversation display
+  const primaryPhrase = currentLesson.phrases?.[0] || {
+    text: "¡Hola! ¿Cómo estás?",
+    translation: "Hello! How are you?",
+    context: "Greeting",
   };
 
-  const handleToggleCamera = () => {
-    setIsCameraOn((prev) => !prev);
+  const handleToggleMic = async () => {
+    try {
+      await call?.microphone.toggle();
+    } catch (err) {
+      console.error("Failed to toggle mic:", err);
+    }
   };
 
   const handleToggleSubtitles = () => {
@@ -103,7 +311,7 @@ export default function LessonScreen() {
     }, 1200);
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     isCompletedRef.current = true;
     if (posthog) {
       const durationSeconds = Math.round((Date.now() - startTimeRef.current) / 1000);
@@ -112,10 +320,33 @@ export default function LessonScreen() {
         duration_seconds: durationSeconds,
       });
     }
+
+    if (call && call.state.callingState !== CallingState.LEFT) {
+      try {
+        await call.leave();
+      } catch (err) {
+        console.error("Error leaving Stream call:", err);
+      }
+    }
+
     // Save completion state and award XP
     completeLesson(currentLesson.id, currentLesson.xpReward);
     router.replace("/(tabs)/learn");
   };
+
+  // Map callingState and mic state to user friendly labels
+  let sessionStatus = "Online";
+  if (callingState === CallingState.JOINING) {
+    sessionStatus = "Connecting...";
+  } else if (callingState === CallingState.RECONNECTING) {
+    sessionStatus = "Reconnecting...";
+  } else if (isMicMuted) {
+    sessionStatus = "Muted";
+  } else if (callingState === CallingState.JOINED) {
+    sessionStatus = "Joined";
+  } else if (callingState === CallingState.LEFT) {
+    sessionStatus = "Ended";
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -128,23 +359,28 @@ export default function LessonScreen() {
           <View style={styles.titleWrapper}>
             <Text style={styles.headerTitle}>AI Teacher</Text>
             <View style={styles.statusRow}>
-              <View style={[styles.statusDot, isMicMuted && styles.statusDotMuted]} />
+              <View style={[
+                styles.statusDot, 
+                isMicMuted && styles.statusDotMuted,
+                callingState === CallingState.JOINING && styles.statusDotConnecting
+              ]} />
               <Text style={styles.statusText}>{sessionStatus}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIconButton} activeOpacity={0.7}>
-            <Ionicons name="videocam-outline" size={22} color="#0f172a" />
-          </TouchableOpacity>
           <View style={styles.streakContainer}>
             <Image source={images.streakFire} style={styles.streakIcon} resizeMode="contain" />
             <Text style={styles.streakText}>{streak}</Text>
           </View>
-          <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
-            <Ionicons name="person-outline" size={18} color="#0f172a" />
-          </TouchableOpacity>
+          <View style={styles.avatarButton}>
+            {clerkUser?.imageUrl ? (
+              <Image source={{ uri: clerkUser.imageUrl }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person-outline" size={18} color="#0f172a" />
+            )}
+          </View>
         </View>
       </View>
 
@@ -155,6 +391,12 @@ export default function LessonScreen() {
           {/* Centered waves animation or visual mascot background */}
           <View style={styles.mascotContainer}>
             <Image source={images.mascotWaving} style={styles.mascotImage} resizeMode="contain" />
+            {isSpeakingWhileMuted && (
+              <View style={styles.speakingMutedBanner}>
+                <Ionicons name="mic-off" size={14} color="#ffffff" />
+                <Text style={styles.speakingMutedText}>You are speaking while muted!</Text>
+              </View>
+            )}
           </View>
 
           {/* Teacher Conversation Speech Bubble */}
@@ -183,22 +425,58 @@ export default function LessonScreen() {
         </View>
       </View>
 
+      {/* Session Attendees & Connection Info */}
+      <View style={styles.participantsSection}>
+        <Text style={styles.participantsHeader}>Lesson Session Info</Text>
+        <View style={styles.participantRow}>
+          {/* Local User */}
+          <View style={styles.participantCard}>
+            <View style={styles.participantAvatarBg}>
+              {clerkUser?.imageUrl ? (
+                <Image source={{ uri: clerkUser.imageUrl }} style={styles.participantAvatar} />
+              ) : (
+                <Ionicons name="person" size={24} color="#64748b" />
+              )}
+            </View>
+            <Text style={styles.participantName} numberOfLines={1}>
+              {clerkUser?.firstName || "You"}
+            </Text>
+            <Text style={styles.participantRole}>Local User</Text>
+            {isMicMuted ? (
+              <Ionicons name="mic-off" size={16} color="#ef4444" style={styles.participantMicIcon} />
+            ) : (
+              <Ionicons name="mic" size={16} color="#22c55e" style={styles.participantMicIcon} />
+            )}
+          </View>
+
+          {/* AI Teacher */}
+          <View style={styles.participantCard}>
+            <View style={[styles.participantAvatarBg, { backgroundColor: "#e0e7ff" }]}>
+              <Image source={images.mascotLogo || images.mascotWaving} style={styles.participantAvatar} resizeMode="contain" />
+            </View>
+            <Text style={styles.participantName} numberOfLines={1}>
+              AI Teacher
+            </Text>
+            <Text style={styles.participantRole}>Remote Host</Text>
+            <Ionicons name="mic" size={16} color="#22c55e" style={styles.participantMicIcon} />
+          </View>
+        </View>
+      </View>
+
       {/* Control Buttons Row */}
       <View style={styles.controlsRow}>
-        {/* Toggle Camera */}
+        {/* Toggle Camera (Disabled for audio call) */}
         <View style={styles.controlItem}>
-          <TouchableOpacity
-            onPress={handleToggleCamera}
-            style={[styles.controlButton, !isCameraOn && styles.controlButtonInactive]}
-            activeOpacity={0.8}
+          <View
+            style={[styles.controlButton, styles.controlButtonInactive, { opacity: 0.5 }]}
           >
             <Ionicons
-              name={isCameraOn ? "videocam" : "videocam-off"}
+              name="videocam-off"
               size={24}
-              color={isCameraOn ? "#4f46e5" : "#94a3b8"}
+              color="#94a3b8"
             />
-          </TouchableOpacity>
-          <Text style={styles.controlLabel}>Camera</Text>
+          </View>
+          <Text style={styles.controlLabel}>Camera (N/A)</Text>
         </View>
 
         {/* Toggle Mic */}
@@ -214,7 +492,7 @@ export default function LessonScreen() {
               color={isMicMuted ? "#ef4444" : "#4f46e5"}
             />
           </TouchableOpacity>
-          <Text style={styles.controlLabel}>Mic</Text>
+          <Text style={styles.controlLabel}>{isMicMuted ? "Unmute" : "Mute"}</Text>
         </View>
 
         {/* Toggle Subtitles */}
@@ -314,6 +592,9 @@ const styles = StyleSheet.create({
   statusDotMuted: {
     backgroundColor: "#ef4444",
   },
+  statusDotConnecting: {
+    backgroundColor: "#eab308",
+  },
   statusText: {
     fontSize: 11,
     fontWeight: "600",
@@ -323,9 +604,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-  },
-  headerIconButton: {
-    padding: 6,
   },
   streakContainer: {
     flexDirection: "row",
@@ -355,10 +633,15 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   stage: {
     flex: 1,
-    backgroundColor: "#fdf8f6", // Warm indoor simulated color
+    backgroundColor: "#fdf8f6",
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 28,
@@ -376,10 +659,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 20,
+    position: "relative",
   },
   mascotImage: {
     width: "75%",
     height: "75%",
+  },
+  speakingMutedBanner: {
+    position: "absolute",
+    top: 10,
+    backgroundColor: "rgba(239, 68, 68, 0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  speakingMutedText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
   },
   speechBubbleWrapper: {
     position: "absolute",
@@ -449,11 +760,70 @@ const styles = StyleSheet.create({
     borderTopColor: "#ffffff",
     marginTop: -1,
   },
+  participantsSection: {
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  participantsHeader: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  participantRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  participantCard: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    padding: 8,
+    position: "relative",
+  },
+  participantAvatarBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#e2e8f0",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    marginRight: 10,
+  },
+  participantAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  participantName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginRight: 4,
+  },
+  participantRole: {
+    position: "absolute",
+    top: 4,
+    right: 8,
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
+  participantMicIcon: {
+    marginLeft: "auto",
+  },
   controlsRow: {
     flexDirection: "row",
     justifyContent: "space-evenly",
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
   controlItem: {
@@ -554,5 +924,49 @@ const styles = StyleSheet.create({
     width: 1.5,
     height: 24,
     backgroundColor: "#cbd5e1",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#4f46e5",
+    textAlign: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: "#4f46e5",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
