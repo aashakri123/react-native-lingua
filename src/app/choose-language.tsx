@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { useUser } from "@clerk/expo";
 import { useLanguageStore } from "@/store/useLanguageStore";
+import { usePostHog } from "posthog-react-native";
 import {
   Image,
   Pressable,
@@ -21,6 +22,7 @@ import {
 export default function ChooseLanguage() {
   const router = useRouter();
   const { user } = useUser();
+  const posthog = usePostHog();
   const isAuthenticated = Boolean(user);
   
   const storeSelectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
@@ -45,7 +47,18 @@ export default function ChooseLanguage() {
     }
   };
 
+  const trackLanguageSelected = (id: string) => {
+    const selectedLang = languages.find((lang) => lang.id === id);
+    if (selectedLang && posthog) {
+      posthog.capture("language_selected", {
+        language_code: selectedLang.id,
+        language_name: selectedLang.name,
+      });
+    }
+  };
+
   const handleSelect = (id: string) => {
+    trackLanguageSelected(id);
     setSelectedLanguageId(id);
     setSelectedLanguageStore(id);
     navigateBackOrHome();
@@ -53,6 +66,7 @@ export default function ChooseLanguage() {
 
   const handleContinue = () => {
     if (selectedLanguageId) {
+      trackLanguageSelected(selectedLanguageId);
       setSelectedLanguageStore(selectedLanguageId);
       navigateBackOrHome();
     }

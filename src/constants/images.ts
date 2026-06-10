@@ -14,6 +14,9 @@ import chinaFlag from "@/assets/images/china-flag.png";
 import streakFire from "@/assets/images/streak-fire.png";
 import palace from "@/assets/images/palace.png";
 import treasure from "@/assets/images/treasure.png";
+import mascotCafe from "@/assets/images/mascot-cafe.png";
+import mascotWaving from "@/assets/images/mascot-waving.png";
+import userPreview from "@/assets/images/user-preview.png";
 
 export const images = {
   mascotLogo,
@@ -32,4 +35,7 @@ export const images = {
   streakFire,
   palace,
   treasure,
+  mascotCafe,
+  mascotWaving,
+  userPreview,
 };
